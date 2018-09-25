@@ -42,20 +42,20 @@ public class App
     public static void main( String[] args ) throws IOException, InterruptedException
     {    	
     	// lấy tất cả thể loại
-    	ArrayList<String> category = getAllCategory("http://api-qui.haydaytv.com/collectiontv/categories");
+    	ArrayList<String> category = getAllCategory("http://localhost:2900/collectiontv/categories");
     	
     	// lấy tất cả danh phim của các thể loại
-    	ArrayList<Movie> dsMovies = getAllListMovie("http://api-qui.haydaytv.com/collectiontv/", category);
+    	ArrayList<Movie> dsMovies = getAllListMovie("http://localhost:2900/collectiontv/", category);
     	
     	category.clear();
     	
     	// lấy tất cả thông tin của phim
-    	ArrayList<Movie> dsInfomartionMovie = getAllListInfomartionMovie("http://api-qui.haydaytv.com/collectiontvinformation/", dsMovies);
+    	ArrayList<Movie> dsInfomartionMovie = getAllListInfomartionMovie("http://localhost:2900/collectiontvinformation/", dsMovies);
     	
     	dsMovies.clear();
     	
     	// lấy tất cả tập phim trong 1 bộ phim
-    	ArrayList<Movie> dsAllMovie = getAllVideosOfMovie("http://api-qui.haydaytv.com/collectiontv/", dsInfomartionMovie);
+    	ArrayList<Movie> dsAllMovie = getAllVideosOfMovie("http://localhost:2900/collectiontv/", dsInfomartionMovie);
     	
     	dsInfomartionMovie.clear();
     	
@@ -73,7 +73,7 @@ public class App
     	printTxt(dsAllMovieUploadImage);
     	
     	for(int i=0; i<dsAllMovieUploadImage.size(); i++) {
-    		sendDataServer("http://api-qui.haydaytv.com/collection", dsAllMovieUploadImage.get(i));
+    		sendDataServer("http://localhost:3004/collection", dsAllMovieUploadImage.get(i));
     	}
     }
 
@@ -82,14 +82,13 @@ public class App
 		for(int i=0; i<dsMovie.size(); i++) {
 			String keyOfMovie = dsMovie.get(i).getKey();
 			String urlImageOfMovie = dsMovie.get(i).getImg();
-			String imgOfMovie = uploadImage("http://api-qui.haydaytv.com/dowloadImage", urlImageOfMovie, keyOfMovie);
+			String imgOfMovie = uploadImage("http://localhost:3004/dowloadImage", urlImageOfMovie, keyOfMovie);
 			dsMovie.get(i).setImg(imgOfMovie);
 			
+			
 			String urlImageMainOfMovie = dsMovie.get(i).getImgMain();
-			if(urlImageMainOfMovie != "") {
-				String imgMainOfMovie = uploadImage("http://api-qui.haydaytv.com/dowloadImage", urlImageMainOfMovie, keyOfMovie);
-				dsMovie.get(i).setImgMain(imgMainOfMovie);
-			}
+			String imgMainOfMovie = uploadImage("http://localhost:3004/dowloadImage", urlImageMainOfMovie, keyOfMovie);
+			dsMovie.get(i).setImgMain(imgMainOfMovie);
 			
 			
 			ArrayList<Videos> dsVideos = new ArrayList<Videos>(dsMovie.get(i).getVideos());
@@ -97,7 +96,7 @@ public class App
 				ArrayList<Episodes> dsEpisodes = new ArrayList<Episodes>(dsVideos.get(j).getEpisodes());
 				for(int k=0; k<dsEpisodes.size(); k++) {
 					String urlImageOfEpisodes = dsEpisodes.get(k).getImg();
-					String imgOfEpisodes = uploadImage("http://api-qui.haydaytv.com/dowloadImage", urlImageOfEpisodes, keyOfMovie);
+					String imgOfEpisodes = uploadImage("http://localhost:3004/dowloadImage", urlImageOfEpisodes, keyOfMovie);
 					dsMovie.get(i).getVideos().get(j).getEpisodes().get(k).setImg(imgOfEpisodes);
 				}
 			}
@@ -115,7 +114,7 @@ public class App
 			for(int j=0; j<videos.size(); j++) {
 				ArrayList<Episodes> episodes = new ArrayList<Episodes>(videos.get(j).getEpisodes());
 				if(episodes.size() > 0) {
-					boolean kt = checkVideo("http://api-qui.haydaytv.com/collectiontv/video", episodes.get(0).getUrlReal());
+					boolean kt = checkVideo("http://localhost:2900/collectiontv/video", episodes.get(0).getUrlReal());
 					if(!kt) indexRemoveVideos.add(j);
 				}else if(episodes.size() == 0){
 					indexRemoveVideos.add(j);
@@ -256,7 +255,7 @@ public class App
 		    	    
 		    	    // lấy tất cả tập phim trong 1 bộ phim
 		    	    String url = divClassTitleBar.get(j).child(1).getElementsByTag("a").get(0).attr("href");
-		    	    ArrayList<Episodes> dsEpisodes = getAllEpisodesOfMovie("http://api-qui.haydaytv.com/collectiontv"+url);
+		    	    ArrayList<Episodes> dsEpisodes = getAllEpisodesOfMovie("http://localhost:2900/collectiontv"+url);
 		    	    
 		    	    
 		    	    videos.setTitle(title);
@@ -270,7 +269,7 @@ public class App
 		    	    key = convertString(key);
 		    	    
 		    	    // lấy tất cả tập phim trong 1 bộ phim
-		    	    ArrayList<Episodes> dsEpisodes = getAllEpisodesOfMovie("http://api-qui.haydaytv.com/collectiontvepisodes/"+dsMovie.get(i).getKey()+"/"+j);
+		    	    ArrayList<Episodes> dsEpisodes = getAllEpisodesOfMovie("http://localhost:2900/collectiontvepisodes/"+dsMovie.get(i).getKey()+"/"+j);
 		    	    
 		    	    
 		    	    videos.setTitle(title);
@@ -296,9 +295,27 @@ public class App
 	}
 
     private static ArrayList<Episodes> getAllEpisodesOfMovie(String url) throws IOException, InterruptedException {
-    	String response = Jsoup.connect(url).ignoreContentType(true).execute().body().toString();
-    	System.out.println(url);
-    	System.out.println(response);
+    	URL obj = new URL(url);
+		HttpURLConnection con = (HttpURLConnection) obj.openConnection();
+		
+		con.setRequestMethod("GET");
+		
+		con.setRequestProperty("User-Agent", USER_AGENT);
+		con.connect();
+		
+		int responseCode = con.getResponseCode();
+		System.out.println("\nSending 'GET' request to URL : " + url);
+		System.out.println("Response Code : " + responseCode);
+		
+		BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
+		String inputLine;
+		StringBuffer response = new StringBuffer();
+		
+		while ((inputLine = in.readLine()) != null) {
+			response.append(inputLine);
+		}
+		in.close();
+		con.disconnect();
 
 		JSONArray result = new JSONArray(response.toString());
 		ArrayList<Episodes> dsEpisodes = new ArrayList<Episodes>();
@@ -388,9 +405,28 @@ public class App
 		for(int i=0; i<dsMovie.size(); i++) {
 			JSONArray result;
 			do {
-				String response = Jsoup.connect(url+dsMovie.get(i).getKey()).ignoreContentType(true).execute().body();
-				System.out.println(url+dsMovie.get(i).getKey());
+				URL obj = new URL(url+dsMovie.get(i).getKey());
+				HttpURLConnection con = (HttpURLConnection) obj.openConnection();
 				
+				con.setRequestMethod("GET");
+				
+				con.setRequestProperty("User-Agent", USER_AGENT);
+				con.connect();
+				
+				int responseCode = con.getResponseCode();
+				System.out.println("\nSending 'GET' request to URL : " + url+dsMovie.get(i).getKey());
+				System.out.println("Response Code : " + responseCode);
+				
+				BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
+				String inputLine;
+				StringBuffer response = new StringBuffer();
+				
+				while ((inputLine = in.readLine()) != null) {
+					response.append(inputLine);
+				}
+				in.close();
+				con.disconnect();
+	
 				result = new JSONArray(response.toString());
 				thoat++;
 			}while(result.length() == 0 && thoat <= 10);
@@ -454,10 +490,28 @@ public class App
 			
 			
 			for(int j=1; j<=page; j++) {
-				String response = Jsoup.connect(url+category.get(i)+"/"+j).ignoreContentType(true).execute().body();
-				System.out.println(url+category.get(i)+"/"+j);
-		    	System.out.println(response);
-
+				URL obj = new URL(url+category.get(i)+"/"+j);
+				HttpURLConnection con = (HttpURLConnection) obj.openConnection();
+				
+				con.setRequestMethod("GET");
+				
+				con.setRequestProperty("User-Agent", USER_AGENT);
+				con.connect();
+				
+				int responseCode = con.getResponseCode();
+				System.out.println("\nSending 'GET' request to URL : " + url+category.get(i)+"/"+j);
+				System.out.println("Response Code : " + responseCode);
+				
+				BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
+				String inputLine;
+				StringBuffer response = new StringBuffer();
+				
+				while ((inputLine = in.readLine()) != null) {
+					response.append(inputLine);
+				}
+				in.close();
+				con.disconnect();
+				
 				
 		    	JSONArray result = new JSONArray(response.toString());
 		    	for(int k=0; k<result.length(); k++) {
@@ -536,9 +590,27 @@ public class App
 	}
 
 	private static int getNumberPage(String url) throws IOException, InterruptedException {
-		String response = Jsoup.connect(url).ignoreContentType(true).execute().body();
-    	System.out.println(url);
-    	System.out.println(response);
+		URL obj = new URL(url);
+		HttpURLConnection con = (HttpURLConnection) obj.openConnection();
+		
+		con.setRequestMethod("GET");
+		
+		con.setRequestProperty("User-Agent", USER_AGENT);
+		con.connect();
+		
+		int responseCode = con.getResponseCode();
+		System.out.println("\nSending 'GET' request to URL : " + url);
+		System.out.println("Response Code : " + responseCode);
+		
+		BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
+		String inputLine;
+		StringBuffer response = new StringBuffer();
+		
+		while ((inputLine = in.readLine()) != null) {
+			response.append(inputLine);
+		}
+		in.close();
+		con.disconnect();
 
     	JSONArray result = new JSONArray(response.toString());
 		JSONObject object = (JSONObject) result.get(0);
@@ -548,10 +620,28 @@ public class App
 	}
 
 	private static ArrayList<String> getAllCategory(String url) throws IOException, InterruptedException {
-		String response = Jsoup.connect(url).ignoreContentType(true).execute().body();
-    	System.out.println(url);
-    	System.out.println(response);
+		URL obj = new URL(url);
+		HttpURLConnection con = (HttpURLConnection) obj.openConnection();
+		
+		con.setRequestMethod("GET");
+		
+		con.setRequestProperty("User-Agent", USER_AGENT);
+		con.connect();
+		
+		int responseCode = con.getResponseCode();
 
+		System.out.println("\nSending 'GET' request to URL : " + url);
+		System.out.println("Response Code : " + responseCode);
+		
+		BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
+		String inputLine;
+		StringBuffer response = new StringBuffer();
+		
+		while ((inputLine = in.readLine()) != null) {
+			response.append(inputLine);
+		}
+		in.close();
+		con.disconnect();
 		
 		ArrayList<String> category = new ArrayList<String>();
     	JSONArray result = new JSONArray(response.toString());
