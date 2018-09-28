@@ -5,6 +5,7 @@ import java.io.BufferedWriter;
 import java.io.DataOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.UnsupportedEncodingException;
@@ -18,12 +19,24 @@ import java.security.NoSuchAlgorithmException;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
 import javax.net.ssl.HttpsURLConnection;
 
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.NameValuePair;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.message.BasicNameValuePair;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.jsoup.Jsoup;
@@ -38,24 +51,30 @@ import org.jsoup.select.Elements;
 public class App 
 {
 	private final static String USER_AGENT = "Mozilla/5.0";
+	private static int so = new Integer(0);
 	
     public static void main( String[] args ) throws IOException, InterruptedException
     {    	
     	// lấy tất cả thể loại
-    	ArrayList<String> category = getAllCategory("http://localhost:2900/collectiontv/categories");
+    	ArrayList<String> category = getAllCategory("http://localhost:4000/collectiontv/categories");
     	
     	// lấy tất cả danh phim của các thể loại
-    	ArrayList<Movie> dsMovies = getAllListMovie("http://localhost:2900/collectiontv/", category);
+    	ArrayList<Movie> dsMovies = getAllListMovie("http://localhost:4000/collectiontv/", category);
     	
     	category.clear();
-    	
-    	// lấy tất cả thông tin của phim
-    	ArrayList<Movie> dsInfomartionMovie = getAllListInfomartionMovie("http://localhost:2900/collectiontvinformation/", dsMovies);
+    	    	
+    	// bỏ các phim trùng key
+    	ArrayList<Movie> dsCleanKeyMovie = checkAllListMovieKey(dsMovies);
     	
     	dsMovies.clear();
     	
+    	// lấy tất cả thông tin của phim
+    	ArrayList<Movie> dsInfomartionMovie = getAllListInfomartionMovie("http://localhost:4000/collectiontvinformation/", dsCleanKeyMovie);
+    	
+    	dsCleanKeyMovie.clear();
+    	
     	// lấy tất cả tập phim trong 1 bộ phim
-    	ArrayList<Movie> dsAllMovie = getAllVideosOfMovie("http://localhost:2900/collectiontv/", dsInfomartionMovie);
+    	ArrayList<Movie> dsAllMovie = getAllVideosOfMovie("http://localhost:4000/collectiontv/", dsInfomartionMovie);
     	
     	dsInfomartionMovie.clear();
     	
@@ -73,21 +92,49 @@ public class App
     	printTxt(dsAllMovieUploadImage);
     	
     	for(int i=0; i<dsAllMovieUploadImage.size(); i++) {
-    		sendDataServer("http://localhost:3004/collection", dsAllMovieUploadImage.get(i));
+    		sendDataServer("http://localhost:4000/collection", dsAllMovieUploadImage.get(i));
     	}
     }
+
+	private static ArrayList<Movie> checkAllListMovieKey(ArrayList<Movie> dsMovies) throws IOException {
+		ArrayList<Movie> dsMovie = new ArrayList<Movie>(dsMovies);
+		ArrayList<Integer> indexRemoveMovies = new ArrayList<Integer>(); 
+		Collections.sort(dsMovie);
+		
+		int i=0;
+		while(i<dsMovie.size()) {
+			  for(int j=i+1; j<dsMovie.size(); j++) {
+				  if(dsMovie.get(i).getKey().compareToIgnoreCase(dsMovie.get(j).getKey()) == 0) {
+					  indexRemoveMovies.add(j);
+					  i = j;
+				  }else {
+					  i = j;
+					  break;
+				  }
+			  }
+			  if(i == dsMovie.size()-1) {
+				  i++;
+			  }
+		};  
+						
+		for(int j=0; j<indexRemoveMovies.size(); j++) {
+			dsMovie.remove(indexRemoveMovies.get(j)-j);
+		}
+		
+		return dsMovie;
+	}
 
 	private static ArrayList<Movie> uploadImageOfMovie(ArrayList<Movie> dsAllMovieChecked) throws IOException, InterruptedException {
 		ArrayList<Movie> dsMovie = new ArrayList<Movie>(dsAllMovieChecked);
 		for(int i=0; i<dsMovie.size(); i++) {
 			String keyOfMovie = dsMovie.get(i).getKey();
 			String urlImageOfMovie = dsMovie.get(i).getImg();
-			String imgOfMovie = uploadImage("http://localhost:3004/dowloadImage", urlImageOfMovie, keyOfMovie);
+			String imgOfMovie = uploadImage("http://localhost:4000/dowloadImage", urlImageOfMovie, keyOfMovie);
 			dsMovie.get(i).setImg(imgOfMovie);
 			
 			
 			String urlImageMainOfMovie = dsMovie.get(i).getImgMain();
-			String imgMainOfMovie = uploadImage("http://localhost:3004/dowloadImage", urlImageMainOfMovie, keyOfMovie);
+			String imgMainOfMovie = uploadImage("http://localhost:4000/dowloadImage", urlImageMainOfMovie, keyOfMovie);
 			dsMovie.get(i).setImgMain(imgMainOfMovie);
 			
 			
@@ -96,7 +143,7 @@ public class App
 				ArrayList<Episodes> dsEpisodes = new ArrayList<Episodes>(dsVideos.get(j).getEpisodes());
 				for(int k=0; k<dsEpisodes.size(); k++) {
 					String urlImageOfEpisodes = dsEpisodes.get(k).getImg();
-					String imgOfEpisodes = uploadImage("http://localhost:3004/dowloadImage", urlImageOfEpisodes, keyOfMovie);
+					String imgOfEpisodes = uploadImage("http://localhost:4000/dowloadImage", urlImageOfEpisodes, keyOfMovie);
 					dsMovie.get(i).getVideos().get(j).getEpisodes().get(k).setImg(imgOfEpisodes);
 				}
 			}
@@ -114,7 +161,7 @@ public class App
 			for(int j=0; j<videos.size(); j++) {
 				ArrayList<Episodes> episodes = new ArrayList<Episodes>(videos.get(j).getEpisodes());
 				if(episodes.size() > 0) {
-					boolean kt = checkVideo("http://localhost:2900/collectiontv/video", episodes.get(0).getUrlReal());
+					boolean kt = checkVideo("http://localhost:4000/collectiontv/video", episodes.get(0).getUrlReal());
 					if(!kt) indexRemoveVideos.add(j);
 				}else if(episodes.size() == 0){
 					indexRemoveVideos.add(j);
@@ -136,38 +183,28 @@ public class App
 	}
 	
 	private static Boolean checkVideo(String url, String paramsUrl) throws IOException, InterruptedException {
-		Boolean kt = false;	
-		URL obj = new URL(url);
-		Map<String, Object> params = new LinkedHashMap<String, Object>();
-		params.put("url", paramsUrl);
-		System.out.println(paramsUrl);
+		System.out.println(url);
+		sleep();
+		HttpClient httpclient = HttpClients.createDefault();
+		HttpPost httppost = new HttpPost(url);
+
+		// Request parameters and other properties.
+		List<NameValuePair> params = new ArrayList<NameValuePair>(2);
+		params.add(new BasicNameValuePair("url", paramsUrl));
+		httppost.setEntity(new UrlEncodedFormEntity(params, "UTF-8"));
+
+		//Execute and get the response.
+		HttpResponse response = httpclient.execute(httppost);
+		HttpEntity entity = response.getEntity();
 		
-		StringBuilder postData = new StringBuilder();
-		for(Map.Entry<String, Object> param : params.entrySet()) {
-			if(postData.length() != 0 ) postData.append("&");
-			postData.append(URLEncoder.encode(param.getKey(), "UTF-8"));
-			postData.append("=");
-			postData.append(URLEncoder.encode(String.valueOf(param.getValue()), "UTF-8"));
-		}
-		byte[] postDataBytes = postData.toString().getBytes("UTF-8");
-		
-		HttpURLConnection conn = (HttpURLConnection) obj.openConnection();
-		conn.setRequestMethod("POST");
-		conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-		conn.setDoOutput(true);
-		conn.getOutputStream().write(postDataBytes);
-		
-		
-		Reader in = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
+		Reader in = new BufferedReader(new InputStreamReader(entity.getContent(), "UTF-8"));
 		
 		StringBuilder sb = new StringBuilder();
 		for(int c; (c = in.read()) >= 0;) sb.append((char)c);
 		in.close();
-		
-
-		String response = sb.toString();
-		
-		JSONArray json = new JSONArray(response.toString());
+				
+		boolean kt = false;
+		JSONArray json = new JSONArray(sb.toString());
 		if(json.length() > 0) {
 			kt = true;
 		}
@@ -177,47 +214,40 @@ public class App
 	}
 
 	private static void sendDataServer(String url, Movie movie) throws IOException, InterruptedException {
-		URL obj = new URL(url);
-		Map<String, Object> params = new LinkedHashMap<String, Object>();
-		params.put("title", movie.getTitle());
-		params.put("key", movie.getKey());
-		params.put("countries", new JSONArray(movie.getCountries()).toString());
-		params.put("content", movie.getContent());
-		params.put("categories", new JSONArray(movie.getCategories()).toString());
-		params.put("img", movie.getImg());
-		params.put("imgMain", movie.getImgMain());
-		params.put("timeASet", movie.getTimeASet());
-		params.put("videos", new JSONArray(movie.getVideos()).toString());
+		System.out.println(url);
+		System.out.println(movie.getContent());
 		
-		StringBuilder postData = new StringBuilder();
-		for(Map.Entry<String, Object> param : params.entrySet()) {
-			if(postData.length() != 0 ) postData.append("&");
-			postData.append(URLEncoder.encode(param.getKey(), "UTF-8"));
-			postData.append("=");
-			postData.append(URLEncoder.encode(String.valueOf(param.getValue()), "UTF-8"));
-		}
-		byte[] postDataBytes = postData.toString().getBytes("UTF-8");
+		HttpClient httpclient = HttpClients.createDefault();
+		HttpPost httppost = new HttpPost(url);
+
+		// Request parameters and other properties.
+		List<NameValuePair> params = new ArrayList<NameValuePair>(2);
+		params.add(new BasicNameValuePair("title", movie.getTitle()));
+		params.add(new BasicNameValuePair("key", movie.getKey()));
+		params.add(new BasicNameValuePair("countries", new JSONArray(movie.getCountries()).toString()));
+		params.add(new BasicNameValuePair("content", movie.getContent()));
+		params.add(new BasicNameValuePair("categories", new JSONArray(movie.getCategories()).toString()));
+		params.add(new BasicNameValuePair("img", movie.getImg()));
+		params.add(new BasicNameValuePair("imgMain", movie.getImgMain()));
+		params.add(new BasicNameValuePair("timeASet", movie.getTimeASet()));
+		params.add(new BasicNameValuePair("videos", new JSONArray(movie.getVideos()).toString()));
+
+		httppost.setEntity(new UrlEncodedFormEntity(params, "UTF-8"));
+
+		//Execute and get the response.
+		HttpResponse response = httpclient.execute(httppost);
+		HttpEntity entity = response.getEntity();
 		
-		HttpURLConnection conn = (HttpURLConnection) obj.openConnection();
-		conn.setRequestMethod("POST");
-		conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-		conn.setDoOutput(true);
-		conn.getOutputStream().write(postDataBytes);
-		
-		
-		Reader in = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
+		Reader in = new BufferedReader(new InputStreamReader(entity.getContent(), "UTF-8"));
 		
 		StringBuilder sb = new StringBuilder();
 		for(int c; (c = in.read()) >= 0;) sb.append((char)c);
 		in.close();
-		
-
-		String response = sb.toString();
-		
-		if(response == "{ message: 'update ok' }") {
+						
+		if(sb.toString() == "{ message: 'update ok' }") {
 			printResultUpdate(movie.getKey());
 		}
-		System.out.println(response);
+		System.out.println(sb.toString());
 	}
 
 	private static void printResultUpdate(String key) throws IOException {
@@ -255,7 +285,7 @@ public class App
 		    	    
 		    	    // lấy tất cả tập phim trong 1 bộ phim
 		    	    String url = divClassTitleBar.get(j).child(1).getElementsByTag("a").get(0).attr("href");
-		    	    ArrayList<Episodes> dsEpisodes = getAllEpisodesOfMovie("http://localhost:2900/collectiontv"+url);
+		    	    ArrayList<Episodes> dsEpisodes = getAllEpisodesOfMovie("http://localhost:4000/collectiontv"+url);
 		    	    
 		    	    
 		    	    videos.setTitle(title);
@@ -269,7 +299,7 @@ public class App
 		    	    key = convertString(key);
 		    	    
 		    	    // lấy tất cả tập phim trong 1 bộ phim
-		    	    ArrayList<Episodes> dsEpisodes = getAllEpisodesOfMovie("http://localhost:2900/collectiontvepisodes/"+dsMovie.get(i).getKey()+"/"+j);
+		    	    ArrayList<Episodes> dsEpisodes = getAllEpisodesOfMovie("http://localhost:4000/collectiontvepisodes/"+dsMovie.get(i).getKey()+"/"+j);
 		    	    
 		    	    
 		    	    videos.setTitle(title);
@@ -295,6 +325,7 @@ public class App
 	}
 
     private static ArrayList<Episodes> getAllEpisodesOfMovie(String url) throws IOException, InterruptedException {
+    	sleep();
     	URL obj = new URL(url);
 		HttpURLConnection con = (HttpURLConnection) obj.openConnection();
 		
@@ -405,6 +436,7 @@ public class App
 		for(int i=0; i<dsMovie.size(); i++) {
 			JSONArray result;
 			do {
+				sleep();
 				URL obj = new URL(url+dsMovie.get(i).getKey());
 				HttpURLConnection con = (HttpURLConnection) obj.openConnection();
 				
@@ -490,6 +522,7 @@ public class App
 			
 			
 			for(int j=1; j<=page; j++) {
+				sleep();
 				URL obj = new URL(url+category.get(i)+"/"+j);
 				HttpURLConnection con = (HttpURLConnection) obj.openConnection();
 				
@@ -552,44 +585,39 @@ public class App
 	}
 
 	private static String uploadImage(String url, String urlImage, String file) throws IOException, InterruptedException {
-		URL obj = new URL(url);
-		Map<String, Object> params = new LinkedHashMap<String, Object>();
-		params.put("url", urlImage);
-		params.put("file", file);
+		sleep();
+		System.out.println(url);
 		System.out.println(urlImage);
+		System.out.println(file);
+		HttpClient httpclient = HttpClients.createDefault();
+		HttpPost httppost = new HttpPost(url);
+
+		// Request parameters and other properties.
+		List<NameValuePair> params = new ArrayList<NameValuePair>(2);
+		params.add(new BasicNameValuePair("url", urlImage));
+		params.add(new BasicNameValuePair("file", file));
+		httppost.setEntity(new UrlEncodedFormEntity(params, "UTF-8"));
+
+		//Execute and get the response.
+		HttpResponse response = httpclient.execute(httppost);
+		HttpEntity entity = response.getEntity();
 		
-		StringBuilder postData = new StringBuilder();
-		for(Map.Entry<String, Object> param : params.entrySet()) {
-			if(postData.length() != 0 ) postData.append("&");
-			postData.append(URLEncoder.encode(param.getKey(), "UTF-8"));
-			postData.append("=");
-			postData.append(URLEncoder.encode(String.valueOf(param.getValue()), "UTF-8"));
-		}
-		byte[] postDataBytes = postData.toString().getBytes("UTF-8");
-		
-		HttpURLConnection conn = (HttpURLConnection) obj.openConnection();
-		
-		conn.setRequestMethod("POST");
-		conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-		conn.setDoOutput(true);
-		conn.getOutputStream().write(postDataBytes);
-		
-		Reader in = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
+		Reader in = new BufferedReader(new InputStreamReader(entity.getContent(), "UTF-8"));
 		
 		StringBuilder sb = new StringBuilder();
 		for(int c; (c = in.read()) >= 0;) sb.append((char)c);
 		in.close();
 		
-
-		String response = sb.toString();
+		System.out.println(sb.toString());
 		
-		JSONObject json = new JSONObject(response);
+		JSONObject json = new JSONObject(sb.toString());
 		String img = (String) json.get("img"); 
 		
 		return img;
 	}
 
 	private static int getNumberPage(String url) throws IOException, InterruptedException {
+		sleep();
 		URL obj = new URL(url);
 		HttpURLConnection con = (HttpURLConnection) obj.openConnection();
 		
@@ -618,8 +646,19 @@ public class App
 
 		return page;
 	}
+	
+	private static void sleep() throws InterruptedException {
+		if(so % 25 == 0) {
+			Thread.sleep(10000);
+			so++;
+		}else {
+			so++;
+		}
+		System.out.println(so);
+	}
 
 	private static ArrayList<String> getAllCategory(String url) throws IOException, InterruptedException {
+		sleep();
 		URL obj = new URL(url);
 		HttpURLConnection con = (HttpURLConnection) obj.openConnection();
 		

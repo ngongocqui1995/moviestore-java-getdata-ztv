@@ -2,7 +2,7 @@ package webapp.maven.webapp;
 
 import java.util.ArrayList;
 
-public class Movie {
+public class Movie implements Comparable<Movie>{
 	private String img;
 	private String imgMain;
 	private String title;
@@ -67,6 +67,9 @@ public class Movie {
 	}
 	public void setKey(String key) {
 		this.key = key;
+	}
+	public int compareTo(Movie o) {
+		return key.compareTo(o.key);
 	}
 	
 }
